@@ -102,17 +102,41 @@ def decompress_text_with_dictionary(data, dictionary):
 def transform_with_pattern(data):
     return bytearray([b ^ 0xFF for b in data])
 
+# === Leading zero compression logic ===
+
+def encode_leading_zeros(data):
+    count = 0
+    max_count = 31
+    while count < len(data) and data[count] == 0x00 and count < max_count:
+        count += 1
+    remainder = data[count:]
+    header = bytes([(count & 0x1F) << 3])  # 5 bits used, 3 bits unused
+    return header + remainder
+
+def decode_leading_zeros(data):
+    if not data:
+        return data
+    count = (data[0] >> 3) & 0x1F
+    leading = bytes([0x00] * count)
+    return leading + data[1:]
+
+# === Main compression functions ===
+
 def compress_bytes_paq_xor(data):
     transformed_data = transform_with_pattern(data)
-    return paq.compress(bytes(transformed_data))
+    encoded = encode_leading_zeros(transformed_data)
+    return paq.compress(encoded)
 
 def decompress_bytes_paq_xor(data):
     try:
         decompressed_data = paq.decompress(data)
-        return transform_with_pattern(bytearray(decompressed_data))
+        restored = decode_leading_zeros(decompressed_data)
+        return transform_with_pattern(bytearray(restored))
     except Exception as e:
         print(f"Decompression error: {e}")
         return None
+
+# === I/O Wrappers ===
 
 def compress_text(input_filename, output_filename, dictionary_filename):
     try:
@@ -176,6 +200,8 @@ def decompress_binary(input_filename, output_filename):
                 print(f"Binary decompressed to {output_filename}")
     except Exception as e:
         print(f"Decompression error: {e}")
+
+# === CLI ===
 
 if __name__ == "__main__":
     print("Choose mode: [1] Compress text, [2] Compress binary, [3] Decompress binary")
